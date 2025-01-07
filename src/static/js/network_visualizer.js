@@ -115,5 +115,134 @@ function addToRecentPackets(sourceIp, destIp, size) {
     // TO DO: implement addToRecentPackets function
 }
 
+async function fetchPackets() {
+    try {
+        const response = await fetch('/api/packets');
+        const newPackets = await response.json();
+        
+        if (Array.isArray(newPackets) && newPackets.length > 0) {
+            allPackets = [...allPackets, ...newPackets];
+            if (allPackets.length > 50) {
+                allPackets = allPackets.slice(-50);
+            }
+            
+            newPackets.forEach(packet => {
+                if (packet.source && packet.destination) {
+                    addConnection(packet.source, packet.destination, packet.size);
+                }
+            });
+        }
+        
+        updatePacketsList(allPackets);
+        
+    } catch (error) {
+        console.error('Error fetching packets:', error);
+    }
+}
+
+function updatePacketsList(packets) {
+    const packetsList = document.getElementById('packets-list');
+    const packetsDetailed = document.getElementById('packets-detailed');
+    const packetsSummary = document.getElementById('packets-summary');
+    
+    packetsList.innerHTML = '';
+    packets.forEach(packet => {
+        const packetElement = document.createElement('div');
+        packetElement.className = 'packet-item';
+        packetElement.innerHTML = `${packet.source} → ${packet.destination}`;
+        packetsList.appendChild(packetElement);
+    });
+
+    packetsDetailed.innerHTML = packets.map(packet => `
+        <div class="packet-item">
+            <div class="packet-detail">
+                <span class="label">Source:</span>
+                <span class="value">${packet.source} (${getDeviceType(packet.source)})</span>
+            </div>
+            <div class="packet-detail">
+                <span class="label">Destination:</span>
+                <span class="value">${packet.destination} (${getDeviceType(packet.destination)})</span>
+            </div>
+            <div class="packet-detail">
+                <span class="label">Size:</span>
+                <span class="value">${formatBytes(packet.size)}</span>
+            </div>
+            <div class="packet-detail">
+                <span class="label">Time:</span>
+                <span class="value">${new Date(packet.timestamp).toLocaleTimeString()}</span>
+            </div>
+        </div>
+    `).join('');
+
+    const summary = calculatePacketsSummary(packets);
+    packetsSummary.innerHTML = `
+        <div class="summary-item">
+            <span class="label">Total Packets:</span>
+            <span class="value">${summary.totalPackets}</span>
+        </div>
+        <div class="summary-item">
+            <span class="label">Total Data:</span>
+            <span class="value">${formatBytes(summary.totalSize)}</span>
+        </div>
+        <div class="summary-item">
+            <span class="label">Active Nodes:</span>
+            <span class="value">${summary.activeNodes}</span>
+        </div>
+    `;
+}
+
+function calculatePacketsSummary(packets) {
+    const uniqueNodes = new Set();
+    let totalSize = 0;
+    
+    packets.forEach(packet => {
+        uniqueNodes.add(packet.source);
+        uniqueNodes.add(packet.destination);
+        totalSize += packet.size;
+    });
+    
+    return {
+        totalPackets: packets.length,
+        totalSize: totalSize,
+        activeNodes: uniqueNodes.size
+    };
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function getDeviceType(ip) {
+    if (ip.startsWith('192.168.')) return 'Local Device';
+    if (ip.startsWith('10.')) return 'Internal Server';
+    if (ip.startsWith('172.')) return 'Virtual Machine';
+    return 'External Device';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.btn-filter').forEach(button => {
+        button.addEventListener('click', () => {
+            const viewType = button.dataset.view;
+            
+            document.querySelectorAll('.btn-filter').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            button.classList.add('active');
+            
+            document.querySelectorAll('.view-basic, .view-detailed, .view-summary').forEach(view => {
+                view.classList.remove('active');
+            });
+            document.querySelector(`.view-${viewType}`).classList.add('active');
+        });
+    });
+});
+
+setInterval(fetchPackets, 1000);
+setInterval(updateTransferRate, 1000);
+
 init();
 animate();
