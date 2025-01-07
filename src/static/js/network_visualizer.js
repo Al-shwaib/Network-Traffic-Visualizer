@@ -46,5 +46,74 @@ function animate() {
     renderer.render(scene, camera);
 }
 
+function createNode(ip) {
+    if (!nodes.has(ip)) {
+        const geometry = new THREE.SphereGeometry(1, 32, 32);
+        const material = new THREE.MeshPhongMaterial({
+            color: getNodeColor(ip),
+            shininess: 100
+        });
+        const node = new THREE.Mesh(geometry, material);
+        
+        node.position.x = (Math.random() - 0.5) * 50;
+        node.position.y = (Math.random() - 0.5) * 50;
+        node.position.z = (Math.random() - 0.5) * 50;
+        
+        scene.add(node);
+        nodes.set(ip, node);
+        updateCounter();
+    }
+    return nodes.get(ip);
+}
+
+function addConnection(sourceIp, destIp, size) {
+    const sourceNode = createNode(sourceIp);
+    const destNode = createNode(destIp);
+    
+    const points = [];
+    points.push(sourceNode.position);
+    points.push(destNode.position);
+    
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+        color: getConnectionColor(size),
+        opacity: 0.6,
+        transparent: true
+    });
+    
+    const line = new THREE.Line(geometry, material);
+    scene.add(line);
+    connections.push(line);
+
+    totalDataSize += size;
+    updateDataSize();
+    addToRecentPackets(sourceIp, destIp, size);
+}
+
+function getNodeColor(ip) {
+    if (ip.startsWith('192.168.')) return 0x4CAF50;
+    if (ip.startsWith('10.')) return 0x2196F3;
+    if (ip.startsWith('172.')) return 0x9C27B0;
+    return 0xFF9800;
+}
+
+function getConnectionColor(size) {
+    if (size < 1000) return 0x4CAF50;
+    if (size < 10000) return 0xFFC107;
+    return 0xF44336;
+}
+
+function updateCounter() {
+    // TO DO: implement updateCounter function
+}
+
+function updateDataSize() {
+    // TO DO: implement updateDataSize function
+}
+
+function addToRecentPackets(sourceIp, destIp, size) {
+    // TO DO: implement addToRecentPackets function
+}
+
 init();
 animate();
