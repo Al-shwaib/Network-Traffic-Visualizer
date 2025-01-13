@@ -26,6 +26,11 @@ function init() {
     scene.add(ambientLight);
 
     window.addEventListener('resize', onWindowResize, false);
+
+    setInterval(fetchPackets, 1000);
+    setInterval(updateTransferRate, 1000);
+
+    animate();
 }
 
 function onWindowResize() {
@@ -34,24 +39,20 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-function animate() {
-    requestAnimationFrame(animate);
-    
-    if (isRotating) {
-        camera.position.x = Math.sin(Date.now() * 0.0005) * 50;
-        camera.position.z = Math.cos(Date.now() * 0.0005) * 50;
-        camera.lookAt(scene.position);
-    }
-    
-    renderer.render(scene, camera);
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 بايت';
+    const k = 1024;
+    const sizes = ['بايت', 'كيلوبايت', 'ميجابايت', 'جيجابايت'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-function createNode(ip) {
+function addNode(ip, type) {
     if (!nodes.has(ip)) {
         const geometry = new THREE.SphereGeometry(1, 32, 32);
         const material = new THREE.MeshPhongMaterial({
-            color: getNodeColor(ip),
-            shininess: 100
+            color: type === 'source' ? 0x00ff88 : 0xff3366,
+            emissive: type === 'source' ? 0x003311 : 0x330011
         });
         const node = new THREE.Mesh(geometry, material);
         
@@ -61,58 +62,59 @@ function createNode(ip) {
         
         scene.add(node);
         nodes.set(ip, node);
+
         updateCounter();
     }
     return nodes.get(ip);
 }
 
 function addConnection(sourceIp, destIp, size) {
-    const sourceNode = createNode(sourceIp);
-    const destNode = createNode(destIp);
+    const source = addNode(sourceIp, 'source');
+    const dest = addNode(destIp, 'destination');
     
     const points = [];
-    points.push(sourceNode.position);
-    points.push(destNode.position);
+    points.push(source.position);
+    points.push(dest.position);
     
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({
-        color: getConnectionColor(size),
+    const material = new THREE.LineBasicMaterial({ 
+        color: 0x00ffff,
         opacity: 0.6,
         transparent: true
     });
-    
     const line = new THREE.Line(geometry, material);
+    
     scene.add(line);
     connections.push(line);
-
     totalDataSize += size;
     updateDataSize();
     addToRecentPackets(sourceIp, destIp, size);
 }
 
-function getNodeColor(ip) {
-    if (ip.startsWith('192.168.')) return 0x4CAF50;
-    if (ip.startsWith('10.')) return 0x2196F3;
-    if (ip.startsWith('172.')) return 0x9C27B0;
-    return 0xFF9800;
-}
-
-function getConnectionColor(size) {
-    if (size < 1000) return 0x4CAF50;
-    if (size < 10000) return 0xFFC107;
-    return 0xF44336;
-}
-
 function updateCounter() {
-    // TO DO: implement updateCounter function
+    document.getElementById('packetCount').textContent = nodes.size;
 }
 
 function updateDataSize() {
-    // TO DO: implement updateDataSize function
+    document.getElementById('dataSize').textContent = formatBytes(totalDataSize);
 }
 
-function addToRecentPackets(sourceIp, destIp, size) {
-    // TO DO: implement addToRecentPackets function
+function updateTransferRate() {
+    const rate = totalDataSize - lastDataSize;
+    document.getElementById('transferRate').textContent = formatBytes(rate) + '/ثانية';
+    lastDataSize = totalDataSize;
+}
+
+function addToRecentPackets(source, dest, size) {
+    const list = document.getElementById('packets-list');
+    const item = document.createElement('div');
+    item.className = 'packet-item';
+    item.innerHTML = `${source} → ${dest} (${formatBytes(size)})`;
+    
+    list.insertBefore(item, list.firstChild);
+    if (list.children.length > 10) {
+        list.removeChild(list.lastChild);
+    }
 }
 
 async function fetchPackets() {
@@ -140,6 +142,29 @@ async function fetchPackets() {
     }
 }
 
+function toggleRotation() {
+    isRotating = !isRotating;
+}
+
+function resetView() {
+    camera.position.z = 50;
+    camera.position.x = 0;
+    camera.position.y = 0;
+    camera.lookAt(scene.position);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    
+    if (isRotating) {
+        camera.position.x = Math.sin(Date.now() * 0.0005) * 50;
+        camera.position.z = Math.cos(Date.now() * 0.0005) * 50;
+        camera.lookAt(scene.position);
+    }
+    
+    renderer.render(scene, camera);
+}
+
 function updatePacketsList(packets) {
     const packetsList = document.getElementById('packets-list');
     const packetsDetailed = document.getElementById('packets-detailed');
@@ -147,86 +172,179 @@ function updatePacketsList(packets) {
     
     packetsList.innerHTML = '';
     packets.forEach(packet => {
-        const packetElement = document.createElement('div');
-        packetElement.className = 'packet-item';
-        packetElement.innerHTML = `${packet.source} → ${packet.destination}`;
+        const packetElement = createBasicPacketElement(packet);
         packetsList.appendChild(packetElement);
     });
 
     packetsDetailed.innerHTML = packets.map(packet => `
         <div class="packet-item">
             <div class="packet-detail">
-                <span class="label">Source:</span>
-                <span class="value">${packet.source} (${getDeviceType(packet.source)})</span>
+                <span class="detail-label">المصدر</span>
+                <span class="detail-value">${packet.source}</span>
+                <span class="detail-label">نوع الجهاز</span>
+                <span class="detail-value">${getDeviceType(packet.source)}</span>
             </div>
             <div class="packet-detail">
-                <span class="label">Destination:</span>
-                <span class="value">${packet.destination} (${getDeviceType(packet.destination)})</span>
+                <span class="detail-label">الوجهة</span>
+                <span class="detail-value">${packet.destination}</span>
+                <span class="detail-label">نوع الجهاز</span>
+                <span class="detail-value">${getDeviceType(packet.destination)}</span>
             </div>
             <div class="packet-detail">
-                <span class="label">Size:</span>
-                <span class="value">${formatBytes(packet.size)}</span>
-            </div>
-            <div class="packet-detail">
-                <span class="label">Time:</span>
-                <span class="value">${new Date(packet.timestamp).toLocaleTimeString()}</span>
+                <span class="detail-label">البروتوكول</span>
+                <span class="detail-value">${packet.type || 'غير معروف'}</span>
+                <span class="detail-label">حجم البيانات</span>
+                <span class="detail-value">${formatBytes(packet.size)}</span>
+                <span class="detail-label">التوقيت</span>
+                <span class="detail-value">${new Date(packet.time).toLocaleTimeString()}</span>
             </div>
         </div>
     `).join('');
 
+    // تحديث عرض الملخص
     const summary = calculatePacketsSummary(packets);
     packetsSummary.innerHTML = `
         <div class="summary-item">
-            <span class="label">Total Packets:</span>
-            <span class="value">${summary.totalPackets}</span>
+            <span class="summary-label">إجمالي الأجهزة النشطة</span>
+            <span class="summary-value">${summary.uniqueDevices}</span>
         </div>
         <div class="summary-item">
-            <span class="label">Total Data:</span>
-            <span class="value">${formatBytes(summary.totalSize)}</span>
+            <span class="summary-label">إجمالي حجم البيانات</span>
+            <span class="summary-value">${formatBytes(summary.totalSize)}</span>
         </div>
         <div class="summary-item">
-            <span class="label">Active Nodes:</span>
-            <span class="value">${summary.activeNodes}</span>
+            <span class="summary-label">متوسط حجم الحزمة</span>
+            <span class="summary-value">${formatBytes(summary.averageSize)}</span>
+        </div>
+        <div class="summary-item">
+            <span class="summary-label">البروتوكولات المستخدمة</span>
+            <span class="summary-value">${summary.protocols.join(', ')}</span>
         </div>
     `;
 }
 
+function createBasicPacketElement(packet) {
+    const packetElement = document.createElement('div');
+    packetElement.className = 'packet-item';
+    
+    const connectionLine = document.createElement('div');
+    connectionLine.className = 'connection-line';
+    
+    const source = document.createElement('span');
+    source.className = 'source';
+    source.textContent = packet.source;
+    
+    const arrow = document.createElement('span');
+    arrow.className = 'arrow';
+    arrow.textContent = '→';
+    
+    const destination = document.createElement('span');
+    destination.className = 'destination';
+    destination.textContent = packet.destination;
+    
+    connectionLine.appendChild(source);
+    connectionLine.appendChild(arrow);
+    connectionLine.appendChild(destination);
+    
+    const details = document.createElement('div');
+    details.className = 'details';
+    details.textContent = `(${formatBytes(packet.size)}) ${packet.protocol}`;
+    
+    packetElement.appendChild(connectionLine);
+    packetElement.appendChild(details);
+    
+    return packetElement;
+}
+
 function calculatePacketsSummary(packets) {
-    const uniqueNodes = new Set();
+    const devices = new Set();
     let totalSize = 0;
-    
+    const protocols = new Set();
+
     packets.forEach(packet => {
-        uniqueNodes.add(packet.source);
-        uniqueNodes.add(packet.destination);
+        devices.add(packet.source);
+        devices.add(packet.destination);
         totalSize += packet.size;
+        if (packet.type) protocols.add(packet.type);
     });
-    
+
     return {
-        totalPackets: packets.length,
+        uniqueDevices: devices.size,
         totalSize: totalSize,
-        activeNodes: uniqueNodes.size
+        averageSize: Math.round(totalSize / packets.length),
+        protocols: Array.from(protocols)
     };
 }
 
-function formatBytes(bytes) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-function getDeviceType(ip) {
-    if (ip.startsWith('192.168.')) return 'Local Device';
-    if (ip.startsWith('10.')) return 'Internal Server';
-    if (ip.startsWith('172.')) return 'Virtual Machine';
-    return 'External Device';
+function getDeviceType(mac) {
+    const prefix = mac.substring(0, 8).toUpperCase();
+    const deviceTypes = {
+        // Apple Devices
+        '00:CD:FE': 'آيفون',
+        '00:A0:40': 'آيباد',
+        '00:03:93': 'ماك بوك',
+        
+        // Samsung Devices
+        '00:07:AB': 'هاتف سامسونج',
+        '84:25:DB': 'تابلت سامسونج',
+        'DC:2C:6E': 'هاتف سامسونج',
+        
+        // Computer Manufacturers
+        'CA:A5:7B': 'كمبيوتر محمول',
+        '00:1A:A0': 'كمبيوتر ديل',
+        '00:24:E8': 'كمبيوتر لينوفو',
+        '00:10:FA': 'كمبيوتر آبل',
+        '00:21:6A': 'كمبيوتر إتش بي',
+        
+        // Network Devices
+        '00:1A:2F': 'راوتر سيسكو',
+        '00:18:4D': 'راوتر نتجير',
+        '00:40:96': 'راوتر تي بي لينك',
+        'DC:FE:07': 'راوتر دي لينك',
+        
+        // Smart Home Devices
+        'B8:27:EB': 'راسبيري باي',
+        '00:17:88': 'أجهزة فيليبس الذكية',
+        'F0:B4:29': 'أجهزة جوجل الذكية',
+        '44:00:49': 'أجهزة أمازون الذكية',
+        
+        // Gaming Consoles
+        '7C:BB:8A': 'بلايستيشن',
+        '00:50:F2': 'إكس بوكس',
+        '98:B6:E9': 'نينتندو سويتش',
+        
+        // Smart TVs
+        '00:27:1C': 'تلفاز سامسونج الذكي',
+        '00:1E:C0': 'تلفاز إل جي الذكي',
+        '00:05:CD': 'تلفاز سوني الذكي',
+        
+        // Printers
+        '00:17:A4': 'طابعة إتش بي',
+        '00:00:74': 'طابعة إبسون',
+        '00:22:58': 'طابعة كانون',
+        
+        // Security Cameras
+        '00:80:F0': 'كاميرا مراقبة',
+        'B0:C5:54': 'كاميرا دي لينك',
+        '00:0F:00': 'كاميرا نتجير',
+        
+        // Other Devices
+        '00:1F:00': 'جهاز بلوتوث',
+        '00:0C:29': 'جهاز افتراضي',
+        '00:60:52': 'جهاز شبكة',
+        '00:A0:C9': 'جهاز ذكي'
+    };
+    
+    for (const [key, value] of Object.entries(deviceTypes)) {
+        if (prefix.startsWith(key)) return value;
+    }
+    return 'جهاز غير معروف';
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.btn-filter').forEach(button => {
         button.addEventListener('click', () => {
-            const viewType = button.dataset.view;
+            const view = button.dataset.view;
             
             document.querySelectorAll('.btn-filter').forEach(btn => {
                 btn.classList.remove('active');
@@ -236,13 +354,9 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.view-basic, .view-detailed, .view-summary').forEach(view => {
                 view.classList.remove('active');
             });
-            document.querySelector(`.view-${viewType}`).classList.add('active');
+            document.querySelector(`.view-${view}`).classList.add('active');
         });
     });
 });
 
-setInterval(fetchPackets, 1000);
-setInterval(updateTransferRate, 1000);
-
 init();
-animate();
