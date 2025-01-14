@@ -42,12 +42,12 @@
 
 1. استنسخ المستودع:
 ```bash
-git clone https://github.com/Al-shwaib/NetViz.git
+git clone https://github.com/Al-shwaib/Network-Traffic-Visualizer.git
 ```
 
 2. انتقل إلى مجلد المشروع:
 ```bash
-cd NetViz
+cd Network-Traffic-Visualizer
 ```
 
 3. إنشاء وتفعيل البيئة الافتراضية:
@@ -132,12 +132,12 @@ A visual tool for monitoring and analyzing network traffic in real-time. Provide
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/Al-Shwaib/NetViz.git
+git clone https://github.com/Al-shwaib/Network-Traffic-Visualizer.git
 ```
 
 2. Navigate to project directory:
 ```bash
-cd NetViz
+cd Network-Traffic-Visualizer
 ```
 
 3. Create and activate virtual environment:
